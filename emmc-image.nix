@@ -25,7 +25,7 @@ with lib;
       TIMEOUT 30
       DEFAULT primary
 
-      MENU TITLE NixOS boot options
+      MENU TITLE NixOS
 
       LABEL primary
         MENU LABEL primary kernel
@@ -34,10 +34,33 @@ with lib;
         INITRD /boot/${config.system.boot.loader.initrdFile}
         APPEND init=${config.system.build.toplevel}/init ${toString config.boot.kernelParams}
     '';
+    loader = pkgs.writeText "loader.conf" ''
+      default nixos.conf
+      timeout 3
+    '';
+    nixosloader = pkgs.writeText "nixos.conf" ''
+      title NixOS
+      linux /boot/${config.system.boot.loader.kernelFile}
+      initrd /boot/${config.system.boot.loader.initrdFile}
+      options init=${config.system.build.toplevel}/init ${toString config.boot.kernelParams}
+      devicetree /boot/${config.hardware.nvidia-jetpack.dtbName}
+    '';
   in {
+    firmwareSize = 64;
     populateFirmwareCommands = ''
         mkdir -p firmware/EFI/BOOT
-        cp ${jetson-firmware}/L4TLauncher.efi firmware/EFI/BOOT/BOOTAA64.efi
+        #cp ${jetson-firmware}/L4TLauncher.efi firmware/EFI/BOOT/BOOTAA64.efi
+        cp ${jetson-firmware}/L4TLauncher.efi firmware/EFI/BOOT/BOOTAA64-L4T.efi
+
+        # systemd-boot
+        cp ${pkgs.systemd}/lib/systemd/boot/efi/systemd-bootaa64.efi firmware/EFI/BOOT/BOOTAA64.efi
+        mkdir -p firmware/loader/entries
+        mkdir -p firmware/boot
+        cp ${loader} ./firmware/loader/loader.conf
+        cp ${nixosloader} ./firmware/loader/entries/nixos.conf
+        cp ${kernelPath} "./firmware/boot/${config.system.boot.loader.kernelFile}"
+        cp ${initrdPath} "./firmware/boot/${config.system.boot.loader.initrdFile}"
+        cp ${fdtPath} "./firmware/boot/${config.hardware.nvidia-jetpack.dtbName}"
     '';
     postBuildCommands = ''
         cp firmware_part.img $out
